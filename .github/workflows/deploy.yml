@@ -1,0 +1,85 @@
+name: Deploy Azure Infra + App
+
+on:
+  push:
+    branches: [ "main" ]
+  workflow_dispatch:
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  terraform:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v2
+        with:
+          terraform_version: 1.6.0
+
+      - name: Azure Login via OIDC
+        uses: azure/login@v1
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Terraform Init
+        working-directory: infra
+        run: terraform init
+
+      - name: Terraform Plan
+        working-directory: infra
+        run: terraform plan -out=tfplan
+
+      - name: Terraform Apply
+        if: github.ref == 'refs/heads/main'
+        working-directory: infra
+        run: terraform apply -auto-approve tfplan
+
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    needs: terraform
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Azure Login via OIDC
+        uses: azure/login@v1
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Get ACR credentials
+        run: |
+          ACR_NAME=$(terraform output -raw acr_login_server | cut -d'.' -f1)
+          echo "ACR_NAME=$ACR_NAME" >> $GITHUB_ENV
+          az acr login --name $ACR_NAME
+
+      - name: Build & Push Docker Image
+        run: |
+          IMAGE_TAG=${ACR_NAME}.azurecr.io/agenticrag:latest
+          docker build -t $IMAGE_TAG ./service
+          docker push $IMAGE_TAG
+          echo "IMAGE_TAG=$IMAGE_TAG" >> $GITHUB_ENV
+
+      - name: Deploy to Azure Container Apps
+        run: |
+          ACA_ENV_ID=$(terraform output -raw aca_environment_id)
+          RG_NAME=$(terraform output -raw resource_group)
+          az containerapp update \
+            --name rag-api \
+            --resource-group $RG_NAME \
+            --image $IMAGE_TAG \
+            --environment $ACA_ENV_ID \
+            --target-port 8080 \
+            --ingress external \
+            --min-replicas 1 --max-replicas 5 \
+            --env-vars \
+              AZURE_OPENAI_ENDPOINT=$(terraform output -raw aoai_endpoint) \
+              AZURE_SEARCH_ENDPOINT=$(terraform output -raw search_service_endpoint)
