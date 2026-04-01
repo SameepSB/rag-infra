@@ -123,6 +123,9 @@ az role assignment create \
   --scope "/subscriptions/$SUBSCRIPTION_ID"
 
 # Directory Readers — Entra app/SP lookups in Terraform
+# This command assigns a Microsoft Entra ID (Azure AD) built‑in role to the service principal, and prints a success or fallback message based on the result.
+# Directory Reader's Template ID:88d8e3e3-8f55-4a1e-953a-9b9898b8876b from Azure portal
+
 az rest --method POST \
   --uri "https://graph.microsoft.com/v1.0/directoryRoles/roleTemplateId=88d8e3e3-8f55-4a1e-953a-9b9898b8876b/members/\$ref" \
   --body "{\"@odata.id\": \"https://graph.microsoft.com/v1.0/directoryObjects/$SP_OBJECT_ID\"}" \
