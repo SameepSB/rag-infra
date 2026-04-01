@@ -13,8 +13,7 @@ graph TB
     end
 
     subgraph Interface Layer
-        LOCAL_UI[Streamlit Chat UI<br><i>local demo</i>]
-        PROD_UI[FastAPI + Entra ID Auth<br><i>production</i>]
+        UI[Streamlit Chat UI]
     end
 
     subgraph Agent Layer
@@ -42,12 +41,9 @@ graph TB
         DOCS[(Document Storage)]
     end
 
-    U --> LOCAL_UI
-    U --> PROD_UI
-    LOCAL_UI --> SRE
-    LOCAL_UI --> ENG
-    PROD_UI --> SRE
-    PROD_UI --> ENG
+    U --> UI
+    UI --> SRE
+    UI --> ENG
 
     SRE --> SEARCH
     SRE --> PG
@@ -77,7 +73,7 @@ graph TB
 ```mermaid
 sequenceDiagram
     participant U as User
-    participant UI as Streamlit / FastAPI
+    participant UI as Streamlit
     participant A as Agent (SRE / Eng)
     participant R as Redis Tool
     participant RAG as RAG Service
@@ -125,7 +121,7 @@ sequenceDiagram
 ```mermaid
 graph LR
     subgraph "Local Implementation (No Azure)"
-        L_UI[Streamlit<br>No Auth]
+        L_UI[Streamlit Chat UI<br>No Auth]
         L_LLM[LangChain ChatOpenAI<br>Standard OpenAI API Key]
         L_VS[(ChromaDB<br>PersistentClient<br>all-MiniLM-L6-v2)]
         L_DB[(SQLite<br>demo_local.db)]
@@ -261,7 +257,7 @@ Tables (identical schema):
 | **Container** | Directory on disk | Blob container (`raw-docs`) |
 | **File Types** | `.md`, `.txt` | `.md`, `.txt`, `.pdf` |
 | **Access** | Direct file I/O (`Path.read_text()`) | `BlobServiceClient` with Managed Identity |
-| **Upload** | Copy files to directory / Streamlit uploader | POST to `/ingest` endpoint |
+| **Upload** | Copy files to directory / Streamlit uploader | Streamlit uploader / API call |
 
 ### 6. API / User Interface
 
@@ -349,7 +345,6 @@ graph TB
         P_ACA --> P_REDIS[Azure Cache for Redis<br>SSL:6380]
         P_ACA --> P_BLOB[Azure Blob Storage<br>raw-docs container]
         P_ACA --> P_KV[Azure Key Vault<br>Secrets]
-        P_ACA --> P_MON[Azure Monitor<br>App Insights]
     end
 ```
 
@@ -394,5 +389,5 @@ The local implementation replaces **7 Azure services** with lightweight local su
 | Azure PostgreSQL | SQLite | No concurrency; no SSL; file-based |
 | Azure Cache for Redis | Python dict (`LocalRedis`) | No TTL enforcement; no persistence; lost on restart |
 | Azure Blob Storage | Local filesystem | No cloud access; manual file placement |
-| Azure Entra ID | None (no auth) | No authentication or RBAC |
+| Azure Entra ID + FastAPI | Streamlit (no auth) | No authentication or RBAC |
 | Azure Key Vault | Direct env vars | Secrets in plaintext `.env` file |
